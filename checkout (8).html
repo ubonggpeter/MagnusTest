@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Magnus - Checkout</title>
+  <style>
+    :root{
+      --bg:#0e0e0f;
+      --panel:#121214;
+      --panel2:#1a1a1d;
+      --text:#ffffff;
+      --muted:#a5a5ac;
+      --accent:#ff8c00;
+      --accent-2:#ff9a1a;
+      --stroke: #2b2b2f;
+      --shadow: 0 10px 30px rgba(0,0,0,.45);
+      --radius-xl: 22px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      background: radial-gradient(1200px 600px at 50% -200px,#2b2b2f33 0%,transparent 50%) , var(--bg);
+      color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .phone{ width:min(420px,94vw); height:860px; background:#0b0b0c; border-radius:36px; border:1px solid #222227; box-shadow: 0 20px 80px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.02); overflow:hidden; }
+    .notchbar{height:18px;background:linear-gradient(180deg,#0b0b0c, #0c0c0d);}
+    .screen{ height:calc(100% - 18px); padding:26px 18px 18px; overflow:auto; background: radial-gradient(120% 120% at 50% -20%, #1b1b1e 0%, #0f0f11 60%);}
+    h1{ margin:0 0 18px; font-weight:800; letter-spacing:.2px; font-size:28px; }
+    .card{ background: linear-gradient(165deg, #1a1a1d 0%, #111114 60%); border:1px solid #26262b; border-radius: var(--radius-xl); padding:16px; box-shadow: var(--shadow);}
+    .row{ display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .pill{ display:inline-flex; align-items:center; gap:8px; padding:8px 14px; border-radius:999px; background: linear-gradient(180deg, var(--accent-2), var(--accent)); color:#1a1100; font-weight:800; font-size:14px; }
+    .price{ font-weight:900; font-size:20px; letter-spacing:.5px; color:#ffad42; }
+    .qty{ color:#bdbdc5; font-size:13px; margin-top:8px; }
+    .divider{ height:1px; background:#26262b; margin:18px 0; border-radius:1px; }
+    .total{ display:flex; align-items:center; justify-content:space-between; margin:10px 0 16px; }
+    .total .value{ font-size:22px; font-weight:900; color:#ffad42; letter-spacing:.3px; }
+    .btns{ display:flex; gap:10px; }
+    .btn{ background:#19191c; color:#fff; border:1px solid #2b2b2f; padding:12px 16px; border-radius:14px; cursor:pointer; }
+    .btn.primary{ background: linear-gradient(180deg, var(--accent-2), var(--accent)); color:#1a1100; font-weight:800; }
+    .muted{ color:var(--muted); font-size:13px; }
+
+    /* Pay flow */
+    .flow{ margin-top:16px; }
+    .prompt{ white-space:pre-wrap; color:#eaeaf1; font-size:14px; line-height:1.45; }
+    .inputRow{ display:flex; gap:8px; margin-top:12px; }
+    .inputRow input{
+      flex:1; background:#121214; border:1px solid #2b2b2f; border-radius:12px; padding:12px 14px; color:#fff;
+    }
+    .inputRow button{ border-radius:12px; padding:12px 14px; border:1px solid #2b2b2f; background:#1a1a1d; color:#fff; cursor:pointer; }
+    .details{ margin-top:12px; }
+    .detailLine{ display:flex; justify-content:space-between; padding:10px 12px; border:1px solid #2b2b2f; background:#121214; border-radius:12px; margin-top:8px; }
+    .badge{ display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:#232328; border:1px solid #2b2b2f; font-size:12px; color:#cfcfd8; }
+  </style>
+</head>
+<body>
+  <div class="phone">
+    <div class="notchbar"></div>
+    <div class="screen">
+      <h1>Checkout</h1>
+      <div id="items"></div>
+
+      <div class="divider"></div>
+      <div class="total">
+        <div class="muted">Total</div>
+        <div id="total" class="value">₦0</div>
+      </div>
+
+      <div class="btns">
+        <button class="btn" id="backBtn">← Back</button>
+        <button class="btn primary" id="payBtn">Pay Now</button>
+      </div>
+
+      <!-- Dynamic pay flow -->
+      <div id="payFlow" class="flow" style="display:none;">
+        <div class="card">
+          <div class="prompt" id="promptText"></div>
+          <div class="inputRow">
+            <input id="countryInput" placeholder="Type your country name…" autocomplete="country-name" />
+            <button id="sendCountry">Send</button>
+          </div>
+          <div id="countryResult" class="details"></div>
+        </div>
+      </div>
+
+      <!--<p class="muted" style="margin-top:10px">This page reads your selection from <code>localStorage</code> (<code>magnus_cart</code>).</p>-->
+    </div>
+  </div>
+
+  <script>
+    function currency(n){ return '₦' + n.toLocaleString('en-NG', {minimumFractionDigits:0}); }
+    const itemsEl = document.getElementById('items');
+    const totalEl = document.getElementById('total');
+    const raw = localStorage.getItem('magnus_cart');
+    let cart = null;
+    try { cart = raw ? JSON.parse(raw) : null; } catch(e){ cart = null; }
+
+    if(!cart || !cart.items || cart.items.length===0){
+      itemsEl.innerHTML = '<div class="card"><div class="muted">No items selected. Go back and choose a package.</div></div>';
+      totalEl.textContent = currency(0);
+    }else{
+      itemsEl.innerHTML = cart.items.map(item => `
+        <div class="card" style="margin-bottom:12px">
+          <div class="row">
+            <div class="pill">${item.name}</div>
+            <div class="price">${currency(item.price)}</div>
+          </div>
+          <div class="qty">Quantity: <strong>${item.qty}</strong></div>
+        </div>
+      `).join('');
+      totalEl.textContent = currency(cart.total);
+    }
+
+    document.getElementById('backBtn').onclick = ()=> history.back();
+
+    // Country prompt
+    const payBtn = document.getElementById('payBtn');
+    const payFlow = document.getElementById('payFlow');
+    const promptText = document.getElementById('promptText');
+    const countryInput = document.getElementById('countryInput');
+    const sendCountry = document.getElementById('sendCountry');
+    const countryResult = document.getElementById('countryResult');
+
+    const promptMsg = `Reply with the name of your country only so that you can proceed with registration. Countries available: 1. Liberia 🇱🇷 2. Kenya 🇰🇪 3. Ghana 🇬🇭 4. Cameroon 🇨🇲 5. Uganda 🇺🇬 | Tanzania 🇹🇿 6. South Africa 🇿🇦 | Nigeria 🇳🇬 7. Sierra Leone 🇸🇱 8. Ivory Coast 🇨🇮 | Togo 🇹🇬 | Benin 🇧🇯 | Mali 🇲🇱 | Burkina Faso 🇧🇫 | Guinea-Bissau 🇬🇼 | Senegal 🇸🇳 | Niger 🇳🇪 9. The Gambia 🇬🇲 10. Zimbabwe 🇿🇼 Which country are you from? Reply with the name only.`;
+
+    // Demo payment details per country
+    const PAY = {
+      "liberia":     { provider:"UBA Liberia (Demo)",     accountName:"Magnus Demo", accountNo:"0001112223", instructions:"Send exact amount; add your phone number in narration." },
+      "kenya":       { provider:"M-Pesa (Demo)",          accountName:"Magnus Demo", accountNo:"Paybill 123456, Acc: MAGNUS", instructions:"Use M-Pesa Paybill." },
+      "ghana":       { provider:"MTN MoMo (Demo)",        accountName:"Magnus Demo", accountNo:"024 000 0000", instructions:"Reference: MAGNUS" },
+      "cameroon":    { provider:"Orange Money (Demo)",    accountName:"Magnus Demo", accountNo:"+237 600 000 000", instructions:"Note: charges apply." },
+      "uganda":      { provider:"Airtel/MTN MoMo (Demo)", accountName:"Magnus Demo", accountNo:"+256 700 000000", instructions:"Mobile money transfer." },
+      "tanzania":    { provider:"M-Pesa/Airtel (Demo)",   accountName:"Magnus Demo", accountNo:"+255 700 000 000", instructions:"Mobile money transfer." },
+      "south africa":{ provider:"FNB (Demo)",             accountName:"Magnus Demo", accountNo:"62000000000", instructions:"EFT Instant preferred." },
+      "nigeria":     { provider:"UBA",            accountName:"MR ABAS", accountNo:"9065643682", instructions:"Do Not Transfer With Opay." },
+      "sierra leone":{ provider:"Afrimoney (Demo)",       accountName:"Magnus Demo", accountNo:"+232 700000000", instructions:"Use reference MAG." },
+      "ivory coast": { provider:"Orange Money (Demo)",    accountName:"Magnus Demo", accountNo:"+225 0700000000", instructions:"a.k.a Côte d'Ivoire." },
+      "cote d'ivoire":{ provider:"Orange Money (Demo)",   accountName:"Magnus Demo", accountNo:"+225 0700000000", instructions:"Same as Ivory Coast." },
+      "togo":        { provider:"Moov/Togo MoMo (Demo)",  accountName:"Magnus Demo", accountNo:"+228 90000000", instructions:"Send screenshot after payment." },
+      "benin":       { provider:"MTN MoMo (Demo)",        accountName:"Magnus Demo", accountNo:"+229 60000000", instructions:"Add note: MAGNUS" },
+      "mali":        { provider:"Orange Money (Demo)",    accountName:"Magnus Demo", accountNo:"+223 60000000", instructions:"Send receipt." },
+      "burkina faso":{ provider:"Orange Money (Demo)",    accountName:"Magnus Demo", accountNo:"+226 60000000", instructions:"Send receipt." },
+      "guinea-bissau":{provider:"Orange Money (Demo)",    accountName:"Magnus Demo", accountNo:"+245 6000000", instructions:"Send receipt." },
+      "senegal":     { provider:"Wave/Orange Money (Demo)",accountName:"Magnus Demo",accountNo:"+221 700000000", instructions:"Send receipt." },
+      "niger":       { provider:"Moov Money (Demo)",      accountName:"Magnus Demo", accountNo:"+227 90000000", instructions:"Send receipt." },
+      "the gambia":  { provider:"QCell/QMoney (Demo)",    accountName:"Magnus Demo", accountNo:"+220 7000000", instructions:"Send receipt." },
+      "gambia":      { provider:"QCell/QMoney (Demo)",    accountName:"Magnus Demo", accountNo:"+220 7000000", instructions:"Send receipt." },
+      "zimbabwe":    { provider:"EcoCash (Demo)",         accountName:"Magnus Demo", accountNo:"+263 700000000", instructions:"Send receipt." }
+    };
+
+    // Map extra aliases/keywords for fuzzy match
+    const ALIASES = {
+      "cote d’ivoire": "cote d'ivoire",
+      "cotedivoire": "cote d'ivoire",
+      "ivc": "ivory coast",
+      "ci": "ivory coast",
+      "sa": "south africa",
+      "za": "south africa",
+      "ngr": "nigeria",
+      "ng": "nigeria",
+      "tz": "tanzania",
+      "gh": "ghana",
+      "ke": "kenya",
+      "lr": "liberia",
+      "sl": "sierra leone",
+      "sn": "senegal",
+      "bj": "benin",
+      "ne": "niger",
+      "gm": "the gambia",
+    };
+
+    function normalize(s){
+      return s.toLowerCase()
+        .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'') // remove accents
+        .replace(/[^a-z\\s]/g,'') // remove punctuation/emojis
+        .replace(/\\s+/g,' ').trim();
+    }
+
+    function findCountry(input){
+      let q = normalize(input);
+      if(ALIASES[q]) q = ALIASES[q];
+      // direct match
+      if(PAY[q]) return q;
+      // partial match search
+      const keys = Object.keys(PAY);
+      for(const k of keys){
+        if(q.includes(k)) return k;
+      }
+      // token-wise check
+      for(const k of keys){
+        const words = k.split(' ');
+        if(words.every(w => q.includes(w))) return k;
+      }
+      return null;
+    }
+
+    
+    function showDetails(key){
+      const info = PAY[key];
+      const total = (cart && cart.total) ? cart.total : 0;
+      const lines = [
+        {label:'Provider', value: info.provider},
+        {label:'Account Name', value: info.accountName},
+        {label:'Account / Number', value: info.accountNo},
+        {label:'Amount (base)', value: currency(total)},
+        {label:'Note', value: info.instructions},
+      ];
+      const html = `
+        <div class="badge">✅ Country detected: <strong>${key.replace(/\b\w/g, c=>c.toUpperCase())}</strong></div>
+        ${lines.map(l => `
+          <div class="detailLine">
+            <span>${l.label}</span>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <strong>${l.value}</strong>
+              <button class="copyBtn" data-copy="${(l.value+'').replace(/"/g,'&quot;')}">Copy</button>
+            </div>
+          </div>
+        `).join('')}
+        <div style="display:flex; gap:10px; margin-top:12px;">
+          <button id="proofBtn" class="btn primary" style="flex:1;">Send Proof of Payment</button>
+        </div>
+        <p class="muted" style="margin-top:10px;"> Only pay local-currency equivalent based on the amount above. After payment, upload/send your receipt to continue.</p>
+      `;
+      countryResult.innerHTML = html;
+
+      const proofBtn = document.getElementById('proofBtn');
+      proofBtn.onclick = ()=>{
+        const msg = `I have made a payment for ${cart && cart.items ? cart.items[0].name : 'Magnus Package'}.
+Country: ${key}
+Provider: ${info.provider}
+Account: ${info.accountName} / ${info.accountNo}
+Amount: ${currency(total)}
+Please find my proof of payment attached.`;
+        const url = 'https://wa.me/2349011025750?text=I%20have%20made%20payment%20successfully%20and%20I%20am%20here%20to%20submit%20proof%20of%20payment' + encodeURIComponent(msg);
+        window.location.href = url;
+      };
+
+      // Copy handlers (event delegation)
+      countryResult.querySelectorAll('.copyBtn').forEach(btn=>{
+        btn.addEventListener('click', async (e)=>{
+          const text = e.currentTarget.getAttribute('data-copy');
+          try{
+            await navigator.clipboard.writeText(text);
+            e.currentTarget.textContent = 'Copied!';
+            setTimeout(()=>{ e.currentTarget.textContent = 'Copy'; }, 1200);
+          }catch(err){
+            // Fallback
+            const ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta);
+            ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+            e.currentTarget.textContent = 'Copied!';
+            setTimeout(()=>{ e.currentTarget.textContent = 'Copy'; }, 1200);
+          }
+        });
+      });
+    }
+
+
+    payBtn.onclick = ()=>{
+      promptText.textContent = promptMsg;
+      payFlow.style.display = 'block';
+      countryInput.focus();
+      countryResult.innerHTML = '';
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+    };
+
+    function handleCountry(){
+      const value = countryInput.value || '';
+      const key = findCountry(value);
+      if(!key){
+        countryResult.innerHTML = '<div class="detailLine"><span>⚠️</span><strong>No match found. Please type the country name exactly as listed.</strong></div>';
+        return;
+      }
+      showDetails(key);
+    }
+
+    sendCountry.onclick = handleCountry;
+    countryInput.addEventListener('keydown', (e)=>{
+      if(e.key === 'Enter'){ e.preventDefault(); handleCountry(); }
+    });
+  </script>
+</body>
+</html>
